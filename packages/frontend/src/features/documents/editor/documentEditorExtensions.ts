@@ -12,6 +12,10 @@ import {
     type EditChartHandler,
 } from './documentChartNode';
 import { DocumentHeadingIds } from './DocumentHeadingIds';
+import {
+    DOCUMENT_SAVED_CHART_NODE,
+    DocumentSavedChartNode,
+} from './documentSavedChartNode';
 import { createDocumentSlashCommandItems } from './documentSlashCommandItems';
 import { DocumentTable } from './documentTableMarkdown';
 import {
@@ -33,7 +37,7 @@ export type DocumentEditorExtensionOptions = {
 };
 
 const DocumentWithCharts = Document.extend({
-    content: `(block | ${DOCUMENT_CHART_NODE} | ${DOCUMENT_UNSUPPORTED_NODE})+`,
+    content: `(block | ${DOCUMENT_CHART_NODE} | ${DOCUMENT_SAVED_CHART_NODE} | ${DOCUMENT_UNSUPPORTED_NODE})+`,
 });
 
 export const createDocumentEditorExtensions = ({
@@ -61,6 +65,7 @@ export const createDocumentEditorExtensions = ({
         onEditChart: editing?.onEditChart ?? null,
         canEditSqlCharts: editing?.canEditSqlCharts ?? false,
     }),
+    DocumentSavedChartNode,
     DocumentUnsupportedNode,
     ...(editing
         ? [
