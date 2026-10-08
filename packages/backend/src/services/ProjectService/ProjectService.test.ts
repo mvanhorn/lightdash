@@ -12560,7 +12560,12 @@ describe('ProjectService.resolveCompileAdapter (MultiDbtSources regression firew
         const projectService = getMockedProjectService(lightdashConfigMock);
         const internals = projectService as unknown as {
             testProjectAdapter: (
-                data: UpdateProject,
+                data: Omit<UpdateProject, 'warehouseConnection'> & {
+                    warehouseConnection: {
+                        kind: 'submitted_resolved';
+                        credentials: CreateWarehouseCredentials;
+                    };
+                },
                 caller: Pick<SessionUser, 'userUuid' | 'organizationUuid'>,
                 context: 'project_create' | 'project_update',
                 method: RequestMethod,
@@ -12571,7 +12576,10 @@ describe('ProjectService.resolveCompileAdapter (MultiDbtSources regression firew
             internals.testProjectAdapter(
                 {
                     ...projectWithSensitiveFields,
-                    warehouseConnection: warehouseClientMock.credentials,
+                    warehouseConnection: {
+                        kind: 'submitted_resolved',
+                        credentials: warehouseClientMock.credentials,
+                    },
                     dbtConnection: { type: DbtProjectType.NONE },
                 },
                 compileUser,
@@ -16500,7 +16508,12 @@ describe('compile adapter connection credentials', () => {
             adapters: ProjectAdapter[],
         ) => Promise<T>;
         testProjectAdapter: (
-            data: UpdateProject,
+            data: Omit<UpdateProject, 'warehouseConnection'> & {
+                warehouseConnection: {
+                    kind: 'submitted_resolved';
+                    credentials: CreateWarehouseCredentials;
+                };
+            },
             user: typeof caller,
             context: 'project_create',
             method: RequestMethod,
@@ -16600,7 +16613,10 @@ describe('compile adapter connection credentials', () => {
         const tested = await service.testProjectAdapter(
             {
                 ...projectWithSensitiveFields,
-                warehouseConnection: ducklakeCredentials,
+                warehouseConnection: {
+                    kind: 'submitted_resolved',
+                    credentials: ducklakeCredentials,
+                },
                 dbtConnection: { type: DbtProjectType.NONE },
             },
             caller,
