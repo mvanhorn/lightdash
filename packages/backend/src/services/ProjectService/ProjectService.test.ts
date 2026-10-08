@@ -10097,6 +10097,13 @@ describe('ProjectService', () => {
         });
 
         it('splits the preview into affected naive and unaffected aware groups (edit flow)', async () => {
+            projectModel.getWarehouseCredentialsForProject.mockResolvedValueOnce(
+                credentials,
+            );
+            projectModel.getProjectWarehouseConfig.mockResolvedValueOnce({
+                organizationWarehouseCredentialsUuid: null,
+                queryTimezone: null,
+            });
             vi.spyOn(service, 'isTimezoneSupportEnabled').mockResolvedValueOnce(
                 true,
             );
@@ -10168,6 +10175,13 @@ describe('ProjectService', () => {
         });
 
         it('releases the tunnel when the preview query fails', async () => {
+            projectModel.getWarehouseCredentialsForProject.mockResolvedValueOnce(
+                credentials,
+            );
+            projectModel.getProjectWarehouseConfig.mockResolvedValueOnce({
+                organizationWarehouseCredentialsUuid: null,
+                queryTimezone: null,
+            });
             vi.spyOn(service, 'isTimezoneSupportEnabled').mockResolvedValueOnce(
                 true,
             );
