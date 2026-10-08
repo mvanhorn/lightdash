@@ -175,7 +175,10 @@ const buildFixture = (releaseSshTunnelOnScopeExit = true) => {
     const factory = new WarehouseClientFactory({
         lightdashConfig: {
             ...lightdashConfigMock,
-            warehouseClient: { releaseSshTunnelOnScopeExit },
+            warehouseClient: {
+                ...lightdashConfigMock.warehouseClient,
+                releaseSshTunnelOnScopeExit,
+            },
         },
         projectModel: projectModel as unknown as ProjectModel,
         featureFlagModel,
