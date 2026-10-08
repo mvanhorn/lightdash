@@ -1,6 +1,8 @@
 import {
     ChartType,
     type Document,
+    type DocumentChartContent,
+    type DocumentSqlChart,
     type SemanticChartAsCode,
 } from '@lightdash/common';
 import {
@@ -12,7 +14,13 @@ import {
     Textarea,
     Tooltip,
 } from '@mantine/core';
-import { IconChartBar, IconCheck, IconDots, IconX } from '@tabler/icons-react';
+import {
+    IconChartBar,
+    IconCheck,
+    IconCode,
+    IconDots,
+    IconX,
+} from '@tabler/icons-react';
 import { EditorContent } from '@tiptap/react';
 import {
     lazy,
@@ -49,17 +57,28 @@ import { useTopDropZone } from './editor/useTopDropZone';
 import { useTopGapClick } from './editor/useTopGapClick';
 import DocumentReportLayout from './presentation/DocumentReportLayout';
 import styles from './presentation/ReportPresentation.module.css';
+import { useCanManageSqlRunner } from './useCanManageSqlRunner';
 import { useUpdateDocumentContent } from './useUpdateDocumentContent';
 import { useUpdateDocumentMetadata } from './useUpdateDocumentMetadata';
 
 const DocumentChartEditorModal = lazy(
     () => import('./DocumentChartEditorModal'),
 );
+const DocumentSqlChartEditorModal = lazy(
+    () => import('./DocumentSqlChartEditorModal'),
+);
 
 /** Where a chart edit lands: an existing node's position, or an insertion point. */
 type ChartEditorState =
-    | { mode: 'insert'; position: number | null }
-    | { mode: 'edit'; position: number; chart: SemanticChartAsCode };
+    | { kind: 'explore'; mode: 'insert'; position: number | null }
+    | {
+          kind: 'explore';
+          mode: 'edit';
+          position: number;
+          chart: SemanticChartAsCode;
+      }
+    | { kind: 'sql'; mode: 'insert'; position: number | null }
+    | { kind: 'sql'; mode: 'edit'; position: number; chart: DocumentSqlChart };
 
 const DocumentEditor = ({
     document,
@@ -80,6 +99,10 @@ const DocumentEditor = ({
         projectUuid: document.projectUuid,
         organizationUuid: document.organizationUuid,
     });
+    const canAuthorSqlCharts = useCanManageSqlRunner(
+        document.organizationUuid,
+        document.projectUuid,
+    );
     const [chartEditor, setChartEditor] = useState<ChartEditorState | null>(
         null,
     );
@@ -97,7 +120,13 @@ const DocumentEditor = ({
     const nameChanged = trimmedName !== document.name;
     const nameValid = trimmedName.length > 0 && trimmedName.length <= 255;
     const onInsertChart = useCallback(
-        (position: number) => setChartEditor({ mode: 'insert', position }),
+        (position: number) =>
+            setChartEditor({ kind: 'explore', mode: 'insert', position }),
+        [],
+    );
+    const onInsertSqlChart = useCallback(
+        (position: number) =>
+            setChartEditor({ kind: 'sql', mode: 'insert', position }),
         [],
     );
     const {
@@ -106,20 +135,34 @@ const DocumentEditor = ({
         dirty: contentDirty,
     } = useDocumentEditor(document, {
         onInsertChart: canAuthorCharts ? onInsertChart : null,
-        onEditChart: canAuthorCharts
-            ? (position, content) => {
-                  if (
-                      content.source === 'semantic' &&
-                      isEditableChart(content)
-                  ) {
-                      setChartEditor({
-                          mode: 'edit',
-                          position,
-                          chart: content.chart,
-                      });
+        onInsertSqlChart: canAuthorSqlCharts ? onInsertSqlChart : null,
+        canEditSqlCharts: canAuthorSqlCharts,
+        onEditChart:
+            canAuthorCharts || canAuthorSqlCharts
+                ? (position, content) => {
+                      if (!isEditableChart(content, canAuthorSqlCharts)) {
+                          return;
+                      }
+                      if (content.source === 'sql') {
+                          setChartEditor({
+                              kind: 'sql',
+                              mode: 'edit',
+                              position,
+                              chart: content.chart,
+                          });
+                      } else if (
+                          content.source === 'semantic' &&
+                          canAuthorCharts
+                      ) {
+                          setChartEditor({
+                              kind: 'explore',
+                              mode: 'edit',
+                              position,
+                              chart: content.chart,
+                          });
+                      }
                   }
-              }
-            : null,
+                : null,
     });
     useTopGapClick(editor);
     useTopDropZone(editor);
@@ -202,11 +245,16 @@ const DocumentEditor = ({
         }
     };
 
-    const applyChart = (chart: SemanticChartAsCode) => {
+    const closeChartEditor = () => {
+        setChartEditor(null);
+        // The modal unmounts without returning focus
+        editor?.commands.focus();
+    };
+
+    const applyChart = (content: DocumentChartContent) => {
         if (!editor || !chartEditor) {
             return;
         }
-        const content = { source: 'semantic' as const, chart };
         if (chartEditor.mode === 'edit') {
             const edited = editor.state.doc.nodeAt(chartEditor.position);
             const attrs: DocumentChartAttributes = {
@@ -249,9 +297,13 @@ const DocumentEditor = ({
             properties: {
                 projectUuid: document.projectUuid,
                 documentUuid: document.documentUuid,
-                chartType: chart.chartConfig.type,
+                chartType:
+                    content.source === 'sql'
+                        ? content.chart.chartKind
+                        : content.chart.chartConfig.type,
                 isCustomChart:
-                    chart.chartConfig.type === ChartType.DATA_APP_VIZ,
+                    content.source !== 'sql' &&
+                    content.chart.chartConfig.type === ChartType.DATA_APP_VIZ,
                 mode: chartEditor.mode === 'edit' ? 'edit' : 'add',
             },
         });
@@ -321,12 +373,32 @@ const DocumentEditor = ({
                                     data-tour-hint="Click Add chart"
                                     onClick={() =>
                                         setChartEditor({
+                                            kind: 'explore',
                                             mode: 'insert',
                                             position: null,
                                         })
                                     }
                                 >
                                     <MantineIcon icon={IconChartBar} />
+                                </ActionIcon>
+                            </Tooltip>
+                        )}
+                        {canAuthorSqlCharts && (
+                            <Tooltip label="Add SQL chart">
+                                <ActionIcon
+                                    variant="default"
+                                    size="lg"
+                                    aria-label="Add SQL chart"
+                                    disabled={busy}
+                                    onClick={() =>
+                                        setChartEditor({
+                                            kind: 'sql',
+                                            mode: 'insert',
+                                            position: null,
+                                        })
+                                    }
+                                >
+                                    <MantineIcon icon={IconCode} />
                                 </ActionIcon>
                             </Tooltip>
                         )}
@@ -412,7 +484,7 @@ const DocumentEditor = ({
                     </DocumentEditorProvider>
                 </Stack>
             </DocumentReportLayout>
-            {chartEditor && canAuthorCharts && (
+            {chartEditor?.kind === 'explore' && canAuthorCharts && (
                 <Suspense
                     fallback={<EmptyStateLoader title="Loading chart editor" />}
                 >
@@ -422,12 +494,28 @@ const DocumentEditor = ({
                                 ? chartEditor.chart
                                 : null
                         }
-                        onClose={() => {
-                            setChartEditor(null);
-                            // The modal unmounts without returning focus
-                            editor?.commands.focus();
-                        }}
-                        onApply={applyChart}
+                        onClose={closeChartEditor}
+                        onApply={(chart) =>
+                            applyChart({ source: 'semantic', chart })
+                        }
+                    />
+                </Suspense>
+            )}
+            {chartEditor?.kind === 'sql' && canAuthorSqlCharts && (
+                <Suspense
+                    fallback={<EmptyStateLoader title="Loading SQL editor" />}
+                >
+                    <DocumentSqlChartEditorModal
+                        projectUuid={document.projectUuid}
+                        chart={
+                            chartEditor.mode === 'edit'
+                                ? chartEditor.chart
+                                : null
+                        }
+                        onClose={closeChartEditor}
+                        onApply={(chart) =>
+                            applyChart({ source: 'sql', chart })
+                        }
                     />
                 </Suspense>
             )}

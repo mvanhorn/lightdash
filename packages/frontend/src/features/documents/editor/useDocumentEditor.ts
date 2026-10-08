@@ -65,6 +65,8 @@ export const useDocumentEditor = (
     const baseline = useRef<string>('');
     const canInsertChart = callbacks.onInsertChart !== null;
     const canEditChart = callbacks.onEditChart !== null;
+    const canInsertSqlChart = (callbacks.onInsertSqlChart ?? null) !== null;
+    const canEditSqlCharts = callbacks.canEditSqlCharts ?? false;
     const extensions = useMemo(
         () =>
             createDocumentEditorExtensions({
@@ -81,9 +83,20 @@ export const useDocumentEditor = (
                                   content,
                               )
                         : null,
+                    onInsertSqlChart: canInsertSqlChart
+                        ? (position) =>
+                              callbacksRef.current.onInsertSqlChart?.(position)
+                        : null,
+                    canEditSqlCharts,
                 },
             }),
-        [document.projectUuid, canInsertChart, canEditChart],
+        [
+            document.projectUuid,
+            canInsertChart,
+            canEditChart,
+            canInsertSqlChart,
+            canEditSqlCharts,
+        ],
     );
     const editor = useEditor(
         {

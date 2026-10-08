@@ -1,11 +1,16 @@
+import {
+    assertUnreachable,
+    type DocumentChartContent,
+} from '@lightdash/common';
 import { ActionIcon, Group, Tooltip } from '@mantine/core';
 import { IconGripVertical, IconPencil, IconTrash } from '@tabler/icons-react';
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
-import { type KeyboardEvent } from 'react';
+import { type KeyboardEvent, type ReactNode } from 'react';
 import MantineIcon from '../../../components/common/MantineIcon';
 import ErrorBoundary from '../../errorBoundary/ErrorBoundary';
 import DocumentChart from '../DocumentChart';
 import DocumentDraftChart from '../DocumentDraftChart';
+import DocumentSqlChart from '../DocumentSqlChart';
 import ReportChartFrame from '../presentation/ReportChartFrame';
 import styles from '../presentation/ReportPresentation.module.css';
 import {
@@ -21,6 +26,57 @@ const MOVE_KEYS: Record<string, MoveDirection> = {
     ArrowDown: 1,
 };
 
+const DocumentDraft = ({
+    projectUuid,
+    spaceUuid,
+    content,
+    actions,
+}: {
+    projectUuid: string;
+    spaceUuid: string | null;
+    content: DocumentChartContent;
+    actions: ReactNode;
+}) => {
+    switch (content.source) {
+        case 'semantic':
+            return (
+                <DocumentDraftChart
+                    projectUuid={projectUuid}
+                    spaceUuid={spaceUuid}
+                    chart={content.chart}
+                    actions={actions}
+                />
+            );
+        case 'sql':
+            return (
+                <DocumentSqlChart
+                    showTitle
+                    projectUuid={projectUuid}
+                    spaceUuid={spaceUuid}
+                    reference={null}
+                    chart={content.chart}
+                    actions={actions}
+                />
+            );
+        case 'merge':
+            return null;
+        default:
+            return assertUnreachable(content, 'Unknown Document chart');
+    }
+};
+
+const getEditLabel = (
+    content: DocumentChartAttributes['content'],
+    canEditSqlCharts: boolean,
+) => {
+    if (isEditableChart(content, canEditSqlCharts)) {
+        return 'Edit chart';
+    }
+    return content?.source === 'sql'
+        ? 'You need SQL Runner access to edit SQL charts'
+        : 'This chart type is read-only';
+};
+
 const DocumentChartNodeView = ({
     node,
     editor,
@@ -30,7 +86,8 @@ const DocumentChartNodeView = ({
     selected,
 }: NodeViewProps) => {
     const { content, chartId, isSaved } = node.attrs as DocumentChartAttributes;
-    const { onEditChart } = extension.options as DocumentChartNodeOptions;
+    const { onEditChart, canEditSqlCharts } =
+        extension.options as DocumentChartNodeOptions;
     const target = useDocumentEditorTarget();
     if (!content) {
         return null;
@@ -76,16 +133,10 @@ const DocumentChartNodeView = ({
                 </ActionIcon>
             </Tooltip>
             {onEditChart && (
-                <Tooltip
-                    label={
-                        isEditableChart(content)
-                            ? 'Edit chart'
-                            : 'This chart type is read-only'
-                    }
-                >
+                <Tooltip label={getEditLabel(content, canEditSqlCharts)}>
                     <ActionIcon
                         aria-label={`Edit chart ${content.chart.name}`}
-                        disabled={!isEditableChart(content)}
+                        disabled={!isEditableChart(content, canEditSqlCharts)}
                         onClick={() => {
                             const position = getPos();
                             if (position !== undefined) {
@@ -120,14 +171,12 @@ const DocumentChartNodeView = ({
                 )}
             >
                 {chartId === null || !isSaved ? (
-                    content.source === 'semantic' ? (
-                        <DocumentDraftChart
-                            projectUuid={target.projectUuid}
-                            spaceUuid={target.spaceUuid}
-                            chart={content.chart}
-                            actions={actions}
-                        />
-                    ) : null
+                    <DocumentDraft
+                        projectUuid={target.projectUuid}
+                        spaceUuid={target.spaceUuid}
+                        content={content}
+                        actions={actions}
+                    />
                 ) : (
                     <DocumentChart
                         showTitle

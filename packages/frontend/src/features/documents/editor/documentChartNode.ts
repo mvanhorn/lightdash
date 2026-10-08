@@ -27,6 +27,8 @@ export type EditChartHandler = (
 export type DocumentChartNodeOptions = {
     /** Opens the chart editor for the node at this document position. */
     onEditChart: EditChartHandler | null;
+    /** SQL charts are editable only with SQL Runner access. */
+    canEditSqlCharts: boolean;
 };
 
 const CONTENT_ATTRIBUTE = 'data-document-chart';
@@ -74,8 +76,12 @@ const parseContentAttribute = (
     }
 };
 
-export const isEditableChart = (content: DocumentChartContent | null) =>
-    content?.source === 'semantic';
+export const isEditableChart = (
+    content: DocumentChartContent | null,
+    canEditSqlCharts: boolean,
+) =>
+    content?.source === 'semantic' ||
+    (content?.source === 'sql' && canEditSqlCharts);
 
 // No group: charts are only allowed at the document's top level (see
 // DocumentWithCharts), so they can never nest in tables, lists or quotes.
@@ -86,7 +92,7 @@ export const DocumentChartNode = Node.create<DocumentChartNodeOptions>({
     draggable: true,
 
     addOptions() {
-        return { onEditChart: null };
+        return { onEditChart: null, canEditSqlCharts: false };
     },
 
     addAttributes() {
@@ -160,7 +166,10 @@ export const DocumentChartNode = Node.create<DocumentChartNodeOptions>({
                 }
                 const { content } = selection.node
                     .attrs as DocumentChartAttributes;
-                if (!content || !isEditableChart(content)) {
+                if (
+                    !content ||
+                    !isEditableChart(content, this.options.canEditSqlCharts)
+                ) {
                     return false;
                 }
                 this.options.onEditChart(selection.from, content);

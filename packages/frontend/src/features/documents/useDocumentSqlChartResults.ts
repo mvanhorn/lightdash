@@ -1,5 +1,6 @@
 import {
     isVizTableConfig,
+    QueryExecutionContext,
     type ApiError,
     type ApiExecuteAsyncSqlQueryResults,
     type DocumentQueryReference,
@@ -19,7 +20,53 @@ export type DocumentSqlChartResults = {
     spec: Record<string, unknown>;
 };
 
-/** Runs a Document's SQL chart and prepares it like a saved SQL chart. */
+const runSavedChart = async (
+    projectUuid: string,
+    { documentUuid, versionUuid, chartId }: DocumentQueryReference,
+    signal: AbortSignal | undefined,
+) =>
+    lightdashApi<ApiExecuteAsyncSqlQueryResults>({
+        url: `/projects/${projectUuid}/documents/${documentUuid}/charts/${encodeURIComponent(chartId)}/query`,
+        method: 'POST',
+        body: JSON.stringify({ versionUuid }),
+        signal,
+    });
+
+/** An unsaved chart runs as SQL Runner would; only its author, who has SQL Runner access, sees it. */
+const runDraftChart = async (
+    projectUuid: string,
+    chart: DocumentSqlChart,
+    signal: AbortSignal | undefined,
+) =>
+    lightdashApi<ApiExecuteAsyncSqlQueryResults>({
+        url: `/projects/${projectUuid}/query/sql`,
+        method: 'POST',
+        version: 'v2',
+        body: JSON.stringify({
+            sql: chart.sql,
+            limit: chart.limit,
+            context: QueryExecutionContext.SQL_RUNNER,
+            ...(!isVizTableConfig(chart.config) && chart.config.fieldConfig
+                ? {
+                      pivotConfiguration: {
+                          indexColumn: chart.config.fieldConfig.x,
+                          valuesColumns: chart.config.fieldConfig.y,
+                          groupByColumns: chart.config.fieldConfig.groupBy,
+                          sortBy: chart.config.fieldConfig.sortBy,
+                      },
+                  }
+                : {}),
+            ...(chart.warehouseConnectionUuid === undefined
+                ? {}
+                : { warehouseConnectionUuid: chart.warehouseConnectionUuid }),
+        }),
+        signal,
+    });
+
+/**
+ * Runs a Document's SQL chart and prepares it like a saved SQL chart. A saved
+ * chart runs from its Document version; `reference` is null for a draft.
+ */
 export const useDocumentSqlChartResults = ({
     projectUuid,
     spaceUuid,
@@ -28,34 +75,27 @@ export const useDocumentSqlChartResults = ({
 }: {
     projectUuid: string;
     spaceUuid: string | null;
-    reference: DocumentQueryReference;
+    reference: DocumentQueryReference | null;
     chart: DocumentSqlChart;
 }) => {
     const palette = useProjectColorPalette(projectUuid, {
         spaceUuid: spaceUuid ?? undefined,
     });
-    const { documentUuid, versionUuid, chartId } = reference;
     return useQuery<DocumentSqlChartResults, ApiError>({
         queryKey: [
             'document-sql-chart-results',
             projectUuid,
-            documentUuid,
-            versionUuid,
-            chartId,
+            reference ?? chart,
             palette.data?.colors,
         ],
         queryFn: async ({ signal }) => {
-            const { queryUuid } =
-                await lightdashApi<ApiExecuteAsyncSqlQueryResults>({
-                    url: `/projects/${projectUuid}/documents/${documentUuid}/charts/${encodeURIComponent(chartId)}/query`,
-                    method: 'POST',
-                    body: JSON.stringify({ versionUuid }),
-                    signal,
-                });
+            const { queryUuid } = reference
+                ? await runSavedChart(projectUuid, reference, signal)
+                : await runDraftChart(projectUuid, chart, signal);
             const { originalColumns, ...pivotResults } =
                 await getPivotQueryResults(projectUuid, queryUuid);
             const columns: VizColumn[] = Object.keys(pivotResults.columns).map(
-                (reference) => ({ reference }),
+                (field) => ({ reference: field }),
             );
             const resultsRunner = new SqlChartResultsRunner({
                 pivotChartData: { ...pivotResults, columns },

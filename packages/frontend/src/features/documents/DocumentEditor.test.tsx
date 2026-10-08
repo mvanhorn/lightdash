@@ -1,6 +1,8 @@
 import {
+    ChartKind,
     ChartType,
     type Document,
+    type DocumentSqlChart,
     type SemanticChartAsCode,
     getDocumentChartBlocks,
     type DocumentContent,
@@ -29,6 +31,39 @@ const mocks = vi.hoisted(() => ({
     chart: vi.fn(),
     track: vi.fn(),
     canAuthorCharts: true,
+    canManageSqlRunner: false,
+}));
+vi.mock('./useCanManageSqlRunner', () => ({
+    useCanManageSqlRunner: () => mocks.canManageSqlRunner,
+}));
+vi.mock('./DocumentSqlChartEditorModal', () => ({
+    default: ({ onApply }: { onApply: (chart: DocumentSqlChart) => void }) => (
+        <div role="dialog" aria-label="SQL chart editor">
+            <button
+                onClick={() =>
+                    onApply({
+                        name: 'Customers',
+                        sql: 'select count(*) as customers from customers',
+                        limit: 500,
+                        chartKind: ChartKind.TABLE,
+                        config: {
+                            type: ChartKind.TABLE,
+                            metadata: { version: 1 },
+                            columns: {},
+                            display: undefined,
+                        },
+                    })
+                }
+            >
+                Apply SQL chart
+            </button>
+        </div>
+    ),
+}));
+vi.mock('./DocumentSqlChart', () => ({
+    default: ({ chart }: { chart: DocumentSqlChart }) => (
+        <div>SQL preview: {chart.name}</div>
+    ),
 }));
 vi.mock('../../providers/Tracking/useTracking', () => ({
     default: () => ({ track: mocks.track }),
@@ -228,6 +263,7 @@ const savedBlocks = () => getDocumentChartBlocks(savedContent());
 beforeEach(() => {
     vi.clearAllMocks();
     mocks.canAuthorCharts = true;
+    mocks.canManageSqlRunner = false;
     mocks.api.mockResolvedValue({
         ...report,
         version: { ...report.version, versionUuid: 'saved' },
@@ -342,6 +378,43 @@ it('adds a chart as a draft node without touching saved charts', async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save document' }));
     await waitFor(() => expect(mocks.api).toHaveBeenCalledOnce());
     expect(Object.keys(savedContent().charts)).toStrictEqual(['c1', 'new-1']);
+});
+
+it('offers SQL charts only with SQL Runner access', async () => {
+    renderEditor();
+    await screen.findByText('Live chart: Orders');
+    expect(
+        screen.queryByRole('button', { name: 'Add SQL chart' }),
+    ).not.toBeInTheDocument();
+});
+
+it('adds a SQL chart as a draft node and saves it', async () => {
+    mocks.canManageSqlRunner = true;
+    renderEditor();
+    await screen.findByText('Live chart: Orders');
+    fireEvent.click(screen.getByRole('button', { name: 'Add SQL chart' }));
+    fireEvent.click(
+        await screen.findByRole('button', { name: 'Apply SQL chart' }),
+    );
+    expect(
+        await screen.findByText('SQL preview: Customers'),
+    ).toBeInTheDocument();
+    expect(mocks.track).toHaveBeenCalledExactlyOnceWith({
+        name: 'document_chart.applied',
+        properties: {
+            projectUuid: report.projectUuid,
+            documentUuid: report.documentUuid,
+            chartType: ChartKind.TABLE,
+            isCustomChart: false,
+            mode: 'add',
+        },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save document' }));
+    await waitFor(() => expect(mocks.api).toHaveBeenCalledOnce());
+    expect(savedContent().charts['new-1']).toMatchObject({
+        source: 'sql',
+        chart: { name: 'Customers' },
+    });
 });
 
 it('removes a chart from the body and the saved content', async () => {

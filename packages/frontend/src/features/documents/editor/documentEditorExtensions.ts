@@ -26,6 +26,9 @@ export type DocumentEditorExtensionOptions = {
     editing?: {
         onInsertChart: ((position: number) => void) | null;
         onEditChart: EditChartHandler | null;
+        /** Opens the SQL chart editor at this position; omitted without SQL Runner access. */
+        onInsertSqlChart?: ((position: number) => void) | null;
+        canEditSqlCharts?: boolean;
     };
 };
 
@@ -56,6 +59,7 @@ export const createDocumentEditorExtensions = ({
     DocumentHeadingIds,
     DocumentChartNode.configure({
         onEditChart: editing?.onEditChart ?? null,
+        canEditSqlCharts: editing?.canEditSqlCharts ?? false,
     }),
     DocumentUnsupportedNode,
     ...(editing
@@ -67,6 +71,7 @@ export const createDocumentEditorExtensions = ({
               SlashCommand.configure({
                   items: createDocumentSlashCommandItems({
                       onInsertChart: editing.onInsertChart,
+                      onInsertSqlChart: editing.onInsertSqlChart ?? null,
                   }),
               }),
           ]

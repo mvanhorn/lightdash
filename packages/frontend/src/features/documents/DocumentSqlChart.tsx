@@ -21,7 +21,8 @@ const CHART_STYLE = { height: '100%', width: '100%' };
 type Props = {
     projectUuid: string;
     spaceUuid: string | null;
-    reference: DocumentQueryReference;
+    /** The saved chart; null previews an unsaved one. */
+    reference: DocumentQueryReference | null;
     chart: DocumentSqlChartDefinition;
     showTitle?: boolean;
     actions?: ReactNode;
@@ -43,8 +44,11 @@ const DocumentSqlChart = ({
     });
     const exportStatus = useDocumentExportStatus();
     const isExporting = exportStatus !== null;
-    const { chartId } = reference;
+    const chartId = reference?.chartId;
     useEffect(() => {
+        if (chartId === undefined) {
+            return;
+        }
         if (query.isError) {
             exportStatus?.markErrored(chartId);
         } else if (query.isSuccess) {
