@@ -2,6 +2,20 @@
     border-radius: 100px !important;
 }
 
+/* Active pill: soft blue border + ring */
+.button[data-filter-active]:not([data-disabled], :disabled),
+.button[data-filter-active]:hover:not([data-disabled], :disabled) {
+    border-color: alpha(var(--ld-field-dimension-color), 0.8);
+    box-shadow:
+        var(--mantine-shadow-xs),
+        0 0 0 2px alpha(var(--ld-field-dimension-color), 0.22),
+        0 0 6px alpha(var(--ld-field-dimension-color), 0.18);
+}
+
+.fieldIcon {
+    transition: color 120ms ease;
+}
+
 .requirementUnmet {
     border: 1px solid alpha(var(--mantine-color-yellow-6), 0.35);
 
